@@ -1,0 +1,17 @@
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: job-watcher-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: job_watcher
+    ports:
+      - "5432:5432"
+    volumes:
+      - job_watcher_postgres_data:/var/lib/postgresql/data
+
+volumes:
+  job_watcher_postgres_data:

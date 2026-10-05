@@ -1,0 +1,53 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Job {
+  id String @id @default(cuid())
+
+  source     String
+  externalId String
+
+  title   String
+  company String?
+
+  location String?
+
+  salaryText String?
+
+  description String? @db.Text
+
+  requirements String[]
+  technologies String[]
+
+  jobUrl String
+
+  postedAt DateTime?
+
+  discoveredAt DateTime @default(now())
+  lastSeenAt     DateTime @default(now())
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  isActive Boolean @default(true)
+
+  contacts         String[] @default([])
+  emails           String[] @default([])
+  contractText     String?
+  postedBy         String?
+  posterProfileUrl String?
+  imageUrls        String[] @default([])
+  
+  @@unique([source, externalId])
+  @@index([source])
+  @@index([postedAt])
+  @@index([company])
+  @@index([isActive])
+}
