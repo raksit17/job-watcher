@@ -140,13 +140,10 @@ export class CuratedJobBoardsSource implements JobSource {
           listingJob.skills,
         ].flat().join(' ');
         const matchesStack = STACK_PATTERN.test(listingSearchText);
-        const matchesPhrase = SEARCH_KEYWORDS.some((keyword) =>
-          listingSearchText.toLowerCase().includes(keyword.toLowerCase()),
-        );
 
-        // TokyoDev surfaces its stack and eligibility tags on each listing card.
-        // Keep its TypeScript and Node.js listings even when they lack a full phrase.
-        if (!matchesStack || (!matchesPhrase && board.name !== 'tokyodev')) continue;
+        // Listings often hide stack keywords on the detail page. Open candidates
+        // within the per-board budget before deciding whether they match.
+        if (!matchesStack && detailPagesVisited >= board.detailLimit) continue;
 
         let detail: JobDetail | undefined;
         if (detailPagesVisited < board.detailLimit) {
