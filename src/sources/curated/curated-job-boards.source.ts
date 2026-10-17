@@ -102,6 +102,25 @@ export class CuratedJobBoardsSource implements JobSource {
         timeout: 60_000,
       });
 
+      const listingReadySelectors: Record<string, string> = {
+        hiredly: 'a[href*="/jobs/"], a[href*="/job/"]',
+        tokyodev: 'li[id^="company_"] [data-collapsable-list-target="item"] a[href*="/jobs/"]',
+        japandev: 'a[href^="/jobs/"]',
+        'relocate-me': 'a[href*="software-engineer-"], a[href*="/jobs/"]',
+        'we-work-remotely': 'section.jobs li a[href*="/remote-jobs/"], .jobs li a[href*="/remote-jobs/"]',
+        himalayas: 'a[href*="/jobs/"]',
+        'remote-ok': 'tr.job h2 a',
+        'landing-jobs': 'a[href*="/jobs/"], a[href*="/job/"]',
+        wearedevelopers: 'a[href*="/jobs/"], a[href*="/job/"]',
+        nodeflair: 'a[href*="/jobs/"], a[href*="/job/"]',
+        turing: 'a[href*="/jobs/"], a[href*="/job/"]',
+      };
+      await page
+        .locator(listingReadySelectors[board.name] ?? 'a[href*="/jobs/"]')
+        .first()
+        .waitFor({ state: 'attached', timeout: 10_000 })
+        .catch(() => undefined);
+
       const discovered = await this.collectSearchResults(page, board);
       this.logger.log(`${board.name} listing returned ${discovered.length} candidates`);
 
@@ -312,6 +331,12 @@ export class CuratedJobBoardsSource implements JobSource {
         waitUntil: 'domcontentloaded',
         timeout: 30_000,
       });
+
+      await page
+        .locator('h1')
+        .first()
+        .waitFor({ state: 'attached', timeout: 8_000 })
+        .catch(() => undefined);
 
       return await page.evaluate((sourceName) => {
         const clean = (value?: string | null) =>
