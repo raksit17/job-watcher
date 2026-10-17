@@ -52,7 +52,7 @@ const BOARDS: Board[] = [
 ];
 
 const SEARCH_KEYWORDS = [
-  'NestJS', 'Nest.js', 'Node.js', 'NodeJS', 'Node.js Backend',
+  'NestJS', 'Nest.js', 'Node.js', 'NodeJS', 'TypeScript', 'JavaScript', 'Node.js Backend',
   'Backend Engineer Node.js', 'Backend Developer TypeScript',
   'Software Engineer TypeScript', 'TypeScript Backend',
   'Full Stack NestJS', 'Next.js NestJS', 'JavaScript Backend',
@@ -159,7 +159,10 @@ export class CuratedJobBoardsSource implements JobSource {
           detail?.skills,
           detail?.requirements,
         ].flat().join(' ');
-        if (!STACK_PATTERN.test(searchable)) continue;
+        const matchesSearchPhrase = SEARCH_KEYWORDS.some((keyword) =>
+          searchable.toLowerCase().includes(keyword.toLowerCase()),
+        );
+        if (!STACK_PATTERN.test(searchable) || !matchesSearchPhrase) continue;
 
         const externalId =
           (typeof listingJob.identifier === 'string'
