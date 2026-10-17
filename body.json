@@ -1,0 +1,7 @@
+﻿{
+  "success": true,
+  "provider": "youtube",
+  "collector": "yt-dlp",
+  "type": "video",
+  "data": {}
+}

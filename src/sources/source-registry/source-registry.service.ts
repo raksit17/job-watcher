@@ -30,12 +30,12 @@ export class SourceRegistryService {
    */
   getAll(): JobSource[] {
     return [
-      // this.jobThaiSource,
-      // this.jobsDbSource,
-      // this.jobTopGunSource,
-      // this.workVentureSource,
-      // this.techInAsiaSource,
-      //  this.wellfoundSource,
+      this.jobThaiSource,
+      this.jobsDbSource,
+      this.jobTopGunSource,
+      this.workVentureSource,
+      this.techInAsiaSource,
+       this.wellfoundSource,
       //  this.jobStreetSource,
       //  this.arcSource
     ];
