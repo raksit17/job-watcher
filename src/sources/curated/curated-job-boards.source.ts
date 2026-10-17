@@ -343,8 +343,8 @@ export class CuratedJobBoardsSource implements JobSource {
           value?.replace(/\s+/g, ' ').trim() || undefined;
 
         if (sourceName === 'tokyodev') {
-          const header = document.querySelector('#job-header');
-          const article = document.querySelector('article.prose');
+          const header = document.querySelector<HTMLElement>('#job-header');
+          const article = document.querySelector<HTMLElement>('article.prose');
           const company = header
             ?.querySelector('a[href^="/companies/"] .font-bold')
             ?.textContent?.trim();
