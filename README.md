@@ -1,3 +1,23 @@
+## Job sources for Node.js and NestJS
+
+The scheduled collector includes Thailand job boards, existing regional sources, and curated international boards. International boards are read from public job pages and filtered for Node.js, NestJS, TypeScript, JavaScript, Express, and Fastify matches.
+
+Registered international boards:
+
+- Hiredly Malaysia
+- TokyoDev and Japan Dev
+- Relocate.me
+- We Work Remotely
+- Himalayas and Remote OK
+- Landing.jobs and WeAreDevelopers
+- NodeFlair and Turing
+
+Search phrases used to guide matching include NestJS, Nest.js, Node.js Backend, NodeJS Backend, Backend Engineer Node.js, Backend Developer TypeScript, Software Engineer TypeScript, TypeScript Backend, Full Stack NestJS, Next.js NestJS, JavaScript Backend, Microservices Node.js, visa sponsorship, relocation, international candidates, APAC, worldwide, and remote Asia.
+
+The collector records the originating board on each job. Eligibility restrictions still need to be checked on the job page before applying.
+
+---
+
 <p align="center">
   <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
 </p>

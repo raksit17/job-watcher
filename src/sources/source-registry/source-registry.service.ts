@@ -1,5 +1,3 @@
-// src/sources/source/source-registry.service.ts
-
 import { Injectable } from '@nestjs/common';
 
 import { JobSource } from '../source/job-source.interface';
@@ -11,6 +9,7 @@ import { TechInAsiaSource } from '../techinasia/techinasia.source';
 import { ArcSource } from '../arc/arc.source';
 import { JobStreetSource } from '../jobstreet/jobstreet.source';
 import { WellfoundSource } from '../wellfound/wellfound.source';
+import { CuratedJobBoardsSource } from '../curated/curated-job-boards.source';
 
 @Injectable()
 export class SourceRegistryService {
@@ -22,12 +21,10 @@ export class SourceRegistryService {
     private readonly techInAsiaSource: TechInAsiaSource,
     private readonly arcSource: ArcSource,
     private readonly jobStreetSource: JobStreetSource,
-    private readonly wellfoundSource: WellfoundSource
+    private readonly wellfoundSource: WellfoundSource,
+    private readonly curatedJobBoardsSource: CuratedJobBoardsSource,
   ) {}
 
-  /**
-   * Source ทั้งหมดที่ระบบรองรับ
-   */
   getAll(): JobSource[] {
     return [
       this.jobThaiSource,
@@ -35,21 +32,14 @@ export class SourceRegistryService {
       this.jobTopGunSource,
       this.workVentureSource,
       this.techInAsiaSource,
-       this.wellfoundSource,
-      //  this.jobStreetSource,
-      //  this.arcSource
+      this.jobStreetSource,
+      this.arcSource,
+      this.wellfoundSource,
+      this.curatedJobBoardsSource,
     ];
   }
 
-  
-  get(
-    name: string,
-  ): JobSource | undefined {
-    return this
-      .getAll()
-      .find(
-        source =>
-          source.name === name,
-      );
+  get(name: string): JobSource | undefined {
+    return this.getAll().find((source) => source.name === name);
   }
 }
