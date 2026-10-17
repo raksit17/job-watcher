@@ -35,7 +35,7 @@ export class SourceRegistryService {
       this.jobStreetSource,
       this.arcSource,
       this.wellfoundSource,
-      this.curatedJobBoardsSource,
+      ...this.curatedJobBoardsSource.getSources(),
     ];
   }
 

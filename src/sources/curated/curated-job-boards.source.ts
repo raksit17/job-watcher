@@ -59,135 +59,146 @@ export class CuratedJobBoardsSource implements JobSource {
   constructor(private readonly browser: BrowserService) {}
 
   async collect(): Promise<JobDto[]> {
+    const results = await Promise.all(
+      BOARDS.map((board) => this.collectBoard(board)),
+    );
+    return results.flat();
+  }
+
+  getSources(): JobSource[] {
+    return BOARDS.map((board) => ({
+      name: board.name,
+      collect: () => this.collectBoard(board),
+    }));
+  }
+
+  private async collectBoard(board: Board): Promise<JobDto[]> {
     const context = await this.browser.createContext();
+    const page = await this.browser.createPage(context);
     const jobs = new Map<string, JobDto>();
 
     try {
-      for (const board of BOARDS) {
-        const page = await this.browser.createPage(context);
-        try {
-          this.logger.log(`Opening ${board.name}: ${board.url}`);
-          await page.goto(board.url, {
-            waitUntil: 'domcontentloaded',
-            timeout: 60_000,
-          });
+      this.logger.log(`Opening ${board.name}: ${board.url}`);
+      await page.goto(board.url, {
+        waitUntil: 'domcontentloaded',
+        timeout: 60_000,
+      });
 
-          const discovered = await page.evaluate(() => {
-            const results: Array<Record<string, unknown>> = [];
-            const visit = (value: unknown): void => {
-              if (Array.isArray(value)) {
-                value.forEach(visit);
-                return;
-              }
-              if (!value || typeof value !== 'object') return;
-              const item = value as Record<string, unknown>;
-              const type = item['@type'];
-              if (
-                (type === 'JobPosting' ||
-                  (Array.isArray(type) && type.includes('JobPosting'))) &&
-                typeof item.title === 'string'
-              ) {
-                results.push(item);
-              }
-              if (item['@graph']) visit(item['@graph']);
-              if (item.itemListElement) visit(item.itemListElement);
-            };
-
-            document
-              .querySelectorAll('script[type="application/ld+json"]')
-              .forEach((script) => {
-                try {
-                  visit(JSON.parse(script.textContent ?? ''));
-                } catch {
-                  // Ignore malformed structured data and continue with other scripts.
-                }
-              });
-
-            if (results.length === 0) {
-              document.querySelectorAll('a[href]').forEach((anchor) => {
-                const link = anchor as HTMLAnchorElement;
-                const title = link.innerText.trim();
-                const href = link.href;
-                if (
-                  title.length < 8 ||
-                  !/\/(jobs?|positions?)\//i.test(new URL(href).pathname)
-                ) return;
-                const card =
-                  link.closest('article, li, [class*="job"], [data-testid*="job"]') ??
-                  link.parentElement;
-                results.push({
-                  title,
-                  url: href,
-                  description: card?.textContent?.trim() ?? '',
-                });
-              });
-            }
-
-            return results;
-          });
-
-          for (const raw of discovered as StructuredJob[]) {
-            const title = raw.title?.trim();
-            const url = raw.url?.startsWith('http')
-              ? raw.url
-              : raw.url
-                ? new URL(raw.url, board.url).href
-                : undefined;
-            const description = this.stripHtml(raw.description ?? '');
-            const searchable = [title, description, raw.skills].flat().join(' ');
-            const normalizedSearch = searchable.toLowerCase();
-            const matchesKeyword = SEARCH_KEYWORDS.some((keyword) =>
-              normalizedSearch.includes(keyword.toLowerCase()),
-            );
-            if (
-              !title ||
-              !url ||
-              !STACK_PATTERN.test(searchable) ||
-              !matchesKeyword
-            ) continue;
-
-            const externalId =
-              (typeof raw.identifier === 'string'
-                ? raw.identifier
-                : raw.identifier?.value) ??
-              new URL(url).pathname.replace(/\/$/, '') ??
-              url;
-            const location = this.locationText(raw.jobLocation);
-            const technologies = [
-              'NestJS', 'Node.js', 'TypeScript', 'JavaScript', 'Next.js',
-              'Express', 'Fastify', 'PostgreSQL', 'MySQL', 'Redis', 'Docker',
-            ].filter((technology) =>
-              new RegExp(technology.replace('.', '\\.?'), 'i').test(searchable),
-            );
-            const dto: JobDto = {
-              source: board.name,
-              externalId: String(externalId).slice(0, 500),
-              title,
-              company: raw.hiringOrganization?.name,
-              location:
-                raw.jobLocationType === 'TELECOMMUTE'
-                  ? 'Remote'
-                  : location,
-              description: description.slice(0, 20_000) || undefined,
-              requirements: [],
-              technologies,
-              jobUrl: url,
-              postedAt: raw.datePosted ? new Date(raw.datePosted) : undefined,
-            };
-
-            if (Number.isNaN(dto.postedAt?.getTime())) delete dto.postedAt;
-            jobs.set(`${dto.source}:${dto.externalId}`, dto);
+      const discovered = await page.evaluate(() => {
+        const results: Array<Record<string, unknown>> = [];
+        const visit = (value: unknown): void => {
+          if (Array.isArray(value)) {
+            value.forEach(visit);
+            return;
           }
-          this.logger.log(`${board.name}: ${jobs.size} matching jobs discovered so far`);
-        } catch (error) {
-          this.logger.warn(
-            `Could not collect ${board.name}: ${error instanceof Error ? error.message : String(error)}`,
-          );
-        } finally {
-          await page.close();
+          if (!value || typeof value !== 'object') return;
+          const item = value as Record<string, unknown>;
+          const type = item['@type'];
+          if (
+            (type === 'JobPosting' ||
+              (Array.isArray(type) && type.includes('JobPosting'))) &&
+            typeof item.title === 'string'
+          ) {
+            results.push(item);
+          }
+          if (item['@graph']) visit(item['@graph']);
+          if (item.itemListElement) visit(item.itemListElement);
+          if (item.item) visit(item.item);
+        };
+
+        document
+          .querySelectorAll('script[type="application/ld+json"]')
+          .forEach((script) => {
+            try {
+              visit(JSON.parse(script.textContent ?? ''));
+            } catch {
+              // Ignore malformed structured data and continue with other scripts.
+            }
+          });
+
+        if (results.length === 0) {
+          document.querySelectorAll('a[href]').forEach((anchor) => {
+            const link = anchor as HTMLAnchorElement;
+            const title = link.innerText.trim();
+            const href = link.href;
+            if (
+              title.length < 8 ||
+              !/\/(jobs?|positions?)\//i.test(new URL(href).pathname)
+            ) return;
+            const card =
+              link.closest('article, li, [class*="job"], [data-testid*="job"]') ??
+              link.parentElement;
+            results.push({
+              title,
+              url: href,
+              description: card?.textContent?.trim() ?? '',
+            });
+          });
         }
+
+        return results;
+      });
+
+      for (const raw of discovered as StructuredJob[]) {
+        const title = raw.title?.trim();
+        const url = raw.url?.startsWith('http')
+          ? raw.url
+          : raw.url
+            ? new URL(raw.url, board.url).href
+            : undefined;
+        const description = this.stripHtml(raw.description ?? '');
+        const searchable = [title, description, raw.skills].flat().join(' ');
+        const normalizedSearch = searchable.toLowerCase();
+        const matchesKeyword = SEARCH_KEYWORDS.some((keyword) =>
+          normalizedSearch.includes(keyword.toLowerCase()),
+        );
+        if (
+          !title ||
+          !url ||
+          !STACK_PATTERN.test(searchable) ||
+          !matchesKeyword
+        ) continue;
+
+        const externalId =
+          (typeof raw.identifier === 'string'
+            ? raw.identifier
+            : raw.identifier?.value) ??
+          new URL(url).pathname.replace(/\/$/, '') ??
+          url;
+        const location = this.locationText(raw.jobLocation);
+        const technologies = [
+          'NestJS', 'Node.js', 'TypeScript', 'JavaScript', 'Next.js',
+          'Express', 'Fastify', 'PostgreSQL', 'MySQL', 'Redis', 'Docker',
+        ].filter((technology) =>
+          new RegExp(technology.replace('.', '\\.?'), 'i').test(searchable),
+        );
+        const dto: JobDto = {
+          source: board.name,
+          externalId: String(externalId).slice(0, 500),
+          title,
+          company: raw.hiringOrganization?.name,
+          location:
+            raw.jobLocationType === 'TELECOMMUTE'
+              ? 'Remote'
+              : location,
+          description: description.slice(0, 20_000) || undefined,
+          requirements: [],
+          technologies,
+          jobUrl: url,
+          postedAt: raw.datePosted ? new Date(raw.datePosted) : undefined,
+        };
+
+        if (Number.isNaN(dto.postedAt?.getTime())) delete dto.postedAt;
+        jobs.set(`${dto.source}:${dto.externalId}`, dto);
       }
+
+      this.logger.log(`${board.name}: ${jobs.size} matching jobs`);
       return [...jobs.values()];
+    } catch (error) {
+      this.logger.warn(
+        `Could not collect ${board.name}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return [];
     } finally {
       await context.close();
     }
