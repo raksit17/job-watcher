@@ -202,86 +202,102 @@ export class CuratedJobBoardsSource implements JobSource {
   ): Promise<StructuredJob[]> {
     return page.evaluate((sourceName) => {
       const results: Array<Record<string, unknown>> = [];
+      const clean = (value?: string | null) => value?.replace(/\s+/g, ' ').trim() || undefined;
+      const add = (
+        anchor: HTMLAnchorElement | null,
+        card: Element | null,
+        titleSelector?: string,
+        companySelector?: string,
+        descriptionSelector?: string,
+      ) => {
+        const title = clean(card?.querySelector(titleSelector ?? 'h1, h2, h3, [class*="title"]')?.textContent) || clean(anchor?.textContent);
+        if (!anchor || !title || title.length < 4) return;
+        const href = anchor.href;
+        if (!href || href.startsWith('javascript:')) return;
+        results.push({
+          title,
+          url: href,
+          description: clean(card?.querySelector(descriptionSelector ?? '[class*="description"], [class*="summary"], p')?.textContent) || clean(card?.textContent) || '',
+          hiringOrganization: clean(card?.querySelector(companySelector ?? '[class*="company"], [class*="employer"]')?.textContent)
+            ? { name: clean(card?.querySelector(companySelector ?? '[class*="company"], [class*="employer"]')?.textContent) }
+            : undefined,
+        });
+      };
+      const cardFor = (anchor: Element) =>
+        anchor.closest('article, li, tr, [data-testid*="job"], [class*="job-card"], [class*="JobCard"], [class*="job-listing"]') ?? anchor.parentElement;
 
       if (sourceName === 'tokyodev') {
-        document
-          .querySelectorAll('li[id^="company_"] [data-collapsable-list-target="item"]')
-          .forEach((item) => {
-            const link = item.querySelector(
-              'a[href^="/companies/"][href*="/jobs/"]',
-            ) as HTMLAnchorElement | null;
-            const title = link?.innerText.trim();
-            if (!link || !title) return;
-            const company = item
-              .closest('li[id^="company_"]')
-              ?.querySelector('h3 a')
-              ?.textContent?.trim();
-            const tags = Array.from(item.querySelectorAll('a.tag'))
-              .map((tag) => tag.textContent?.trim())
-              .filter(Boolean);
-            results.push({
-              title,
-              url: link.href,
-              description: item.textContent?.trim() ?? '',
-              hiringOrganization: company ? { name: company } : undefined,
-              skills: tags.join(', '),
-            });
-          });
-
-        if (results.length > 0) return results;
-      }
-
-      const visit = (value: unknown): void => {
-        if (Array.isArray(value)) {
-          value.forEach(visit);
-          return;
-        }
-        if (!value || typeof value !== 'object') return;
-        const item = value as Record<string, unknown>;
-        const type = item['@type'];
-        if (
-          (type === 'JobPosting' ||
-            (Array.isArray(type) && type.includes('JobPosting'))) &&
-          typeof item.title === 'string'
-        ) {
-          results.push(item);
-        }
-        if (item['@graph']) visit(item['@graph']);
-        if (item.itemListElement) visit(item.itemListElement);
-        if (item.item) visit(item.item);
-      };
-
-      document
-        .querySelectorAll('script[type="application/ld+json"]')
-        .forEach((script) => {
-          try {
-            visit(JSON.parse(script.textContent ?? ''));
-          } catch {
-            // Ignore malformed structured data and continue with other scripts.
+        document.querySelectorAll('li[id^="company_"] [data-collapsable-list-target="item"]').forEach((item) => {
+          const anchor = item.querySelector('a[href^="/companies/"][href*="/jobs/"]') as HTMLAnchorElement | null;
+          const company = item.closest('li[id^="company_"]')?.querySelector('h3 a')?.textContent?.trim();
+          const tags = Array.from(item.querySelectorAll('a.tag')).map((tag) => tag.textContent?.trim()).filter(Boolean);
+          add(anchor, item, 'a[href*="/jobs/"]');
+          const last = results[results.length - 1];
+          if (last) {
+            last.hiringOrganization = company ? { name: company } : undefined;
+            last.skills = tags.join(', ');
+            last.description = item.textContent?.trim() ?? '';
           }
         });
-
-      if (results.length === 0) {
-        document.querySelectorAll('a[href]').forEach((anchor) => {
-          const link = anchor as HTMLAnchorElement;
-          const title = link.innerText.trim();
-          const href = link.href;
-          if (
-            title.length < 8 ||
-            !/\/(jobs?|positions?)\//i.test(new URL(href).pathname)
-          ) return;
-          const card =
-            link.closest('article, li, [class*="job"], [data-testid*="job"]') ??
-            link.parentElement;
-          results.push({
-            title,
-            url: href,
-            description: card?.textContent?.trim() ?? '',
-          });
+      } else if (sourceName === 'remote-ok') {
+        document.querySelectorAll('tr.job, [data-id].job').forEach((card) => {
+          const anchor = card.querySelector('.company h2 a, h2 a, a[href*="/l/"]') as HTMLAnchorElement | null;
+          add(anchor, card, 'h2, .company h2', '.company h3, h3');
+        });
+      } else if (sourceName === 'we-work-remotely') {
+        document.querySelectorAll('section.jobs li, .jobs li, li[class*="job"]').forEach((card) => {
+          const anchor = card.querySelector('a[href*="/remote-jobs/"]') as HTMLAnchorElement | null;
+          add(anchor, card, 'span.title, h2, h3, a[href*="/remote-jobs/"]', 'span.company, h3');
+        });
+      } else {
+        const selectors: Record<string, string> = {
+          hiredly: 'a[href*="/jobs/"], a[href*="/job/"]',
+          japandev: 'a[href^="/jobs/"]',
+          'relocate-me': 'a[href*="/international-jobs/"], a[href*="/jobs/"], a[href*="/software-engineer-"], a[href*="/developer-"]',
+          himalayas: 'a[href*="/jobs/"]',
+          'landing-jobs': 'a[href*="/jobs/"], a[href*="/job/"]',
+          wearedevelopers: 'a[href*="/jobs/"], a[href*="/job/"]',
+          nodeflair: 'a[href*="/jobs/"], a[href*="/job/"]',
+          turing: 'a[href*="/jobs/"], a[href*="/job/"]',
+        };
+        const selector = selectors[sourceName] ?? 'a[href*="/jobs/"]';
+        document.querySelectorAll(selector).forEach((element) => {
+          const anchor = element as HTMLAnchorElement;
+          const path = new URL(anchor.href).pathname;
+          const isDetailPath = sourceName === 'relocate-me'
+            ? /\/(?:software-engineer|developer|backend|fullstack)[^/]*$/i.test(path) || /\/jobs?\/[^/]+$/i.test(path)
+            : /\/(?:jobs?|positions?)\/[^/?#]+(?:\/[^/?#]+)*$/i.test(path);
+          if (!isDetailPath) return;
+          const card = cardFor(anchor);
+          add(anchor, card);
         });
       }
 
-      return results;
+      if (results.length === 0) {
+        const pathPatterns: Record<string, RegExp> = {
+          hiredly: /\/(?:jobs?|job)\//i,
+          japandev: /^\/jobs\/[^/]+/i,
+          'relocate-me': /\/(?:jobs?|software-engineer|developer|backend|fullstack)[^/]*$/i,
+          'we-work-remotely': /\/remote-jobs\//i,
+          himalayas: /\/(?:jobs?|companies)\//i,
+          'remote-ok': /\/remote-/i,
+          'landing-jobs': /\/(?:jobs?|job)\//i,
+          wearedevelopers: /\/(?:jobs?|job)\//i,
+          nodeflair: /\/(?:jobs?|job)\//i,
+        };
+        document.querySelectorAll('a[href]').forEach((element) => {
+          const anchor = element as HTMLAnchorElement;
+          if (!pathPatterns[sourceName]?.test(new URL(anchor.href).pathname)) return;
+          add(anchor, cardFor(anchor));
+        });
+      }
+      const seen = new Set<string>();
+      return results.filter((job) => {
+        const key = String(job.url);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
     }, board.name) as Promise<StructuredJob[]>;
   }
 
@@ -369,22 +385,33 @@ export class CuratedJobBoardsSource implements JobSource {
           }
         });
 
-        const main = document.querySelector(
-          '[itemprop="description"], article, main, [class*="description"]',
-        );
+        const detailSelectors: Record<string, { body: string; company: string; location: string }> = {
+          hiredly: { body: '[class*="job-description"], [class*="JobDescription"], main article', company: '[class*="company-name"], [class*="company"]', location: '[class*="location"]' },
+          japandev: { body: '[class*="job-description"], [class*="JobDescription"], article, main', company: '[class*="company-name"], [class*="company"]', location: '[class*="location"]' },
+          'relocate-me': { body: '#job-description, [class*="job-description"], article, main', company: '[class*="company-name"], [class*="company"]', location: '[class*="location"]' },
+          'we-work-remotely': { body: '.listing-container, .job-listing, main article, main', company: '[class*="company"]', location: '[class*="location"], [class*="region"]' },
+          himalayas: { body: '[class*="JobPage"], [class*="job-description"], main article, main', company: '[class*="company-name"], [class*="company"]', location: '[class*="location"], [class*="location"]' },
+          'remote-ok': { body: '#job_description, #job-description, .description, main', company: '.company h3, [class*="company"]', location: '[class*="location"]' },
+          'landing-jobs': { body: '[class*="job-description"], [class*="description"], main article, main', company: '[class*="company-name"], [class*="company"]', location: '[class*="location"]' },
+          wearedevelopers: { body: '[class*="job-description"], [class*="description"], main article, main', company: '[class*="company-name"], [class*="company"]', location: '[class*="location"]' },
+          nodeflair: { body: '[class*="job-description"], [class*="description"], main article, main', company: '[class*="company-name"], [class*="company"]', location: '[class*="location"]' },
+          turing: { body: '[class*="job-description"], [class*="description"], main article, main', company: '[class*="company-name"], [class*="company"]', location: '[class*="location"]' },
+        };
+        const selectors = detailSelectors[sourceName] ?? {
+          body: '[itemprop="description"], article, main, [class*="description"]',
+          company: '[itemprop="hiringOrganization"], [class*="company-name"], [class*="company"]',
+          location: '[itemprop="jobLocation"], [class*="location"]',
+        };
+        const main = document.querySelector(selectors.body);
         const description =
           typeof posting?.description === 'string'
             ? posting.description
             : main?.textContent ?? document.body.innerText;
         const company =
           (posting?.hiringOrganization as { name?: string } | undefined)?.name ??
-          document.querySelector(
-            '[itemprop="hiringOrganization"], [class*="company-name"], [class*="company"]',
-          )?.textContent?.trim();
+          document.querySelector(selectors.company)?.textContent?.trim();
         const location =
-          document.querySelector(
-            '[itemprop="jobLocation"], [class*="location"]',
-          )?.textContent?.trim();
+          document.querySelector(selectors.location)?.textContent?.trim();
         const skills =
           typeof posting?.skills === 'string'
             ? posting.skills.split(/[,;|]/).map((skill) => skill.trim())
